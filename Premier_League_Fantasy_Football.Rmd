@@ -1,0 +1,162 @@
+---
+title: "Premier League Fantasy Football"
+author: "Barry Bullas MBE & Poppy Bullas"
+date: "30/08/2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+list_of_packages <- c("rvest", "dplyr", "httr", "xml2", "jsonlite", "DT")
+new_packages <- list_of_packages[!(list_of_packages %in% installed.packages()[,"Package"])]
+if(length(new_packages)) install.packages(new_packages)
+
+#Load required packages
+lapply(list_of_packages, library, character.only = TRUE)
+```
+
+# Premier League Fantasy Football 2019/20
+The [Premier League Fantasy Football website](https://fantasy.premierleague.com/statistics) has a useful API feature that can be used to return data on players and teams.
+
+This project is my attempt to retrieve this data, in the hope that i will better be able to predict which players i should transfer onto my team. I used [this post by Paddy KG](https://medium.com/@YourMumSaysWhat/how-to-get-data-from-the-fantasy-premier-league-api-4477d6a334c3) as a starting point.  The urls in his post have changed slightly this year but it helped me figure them out
+ 
+## Player stats
+The player stats include the ICT index, developed specifically to give a verdict on a player as an FPL asset.  You can read [How the ICT Index in Fantasy works](https://www.premierleague.com/news/65567).
+
+This page [https://fantasy.premierleague.com/api/bootstrap-static/](https://fantasy.premierleague.com/api/bootstrap-static/) contains the stats for all players. 
+
+Each player is given a unique id in the dataset.  If you want to identify the id of a specific player then you can search [https://fantasy.premierleague.com/api/bootstrap-static/](https://fantasy.premierleague.com/api/bootstrap-static/) in your browser for the name.  For example searching if you search for **Salah** in the data you would see that his player id is **191**.
+
+    "id":191,"in_dreamteam":true,"news":"","news_added":null,"now_cost":125,"photo":"118748.jpg","points_per_game":"10.0","second_name":"Salah",
+
+With the player id you can go to [https://fantasy.premierleague.com/api/element-summary/191/](https://fantasy.premierleague.com/api/element-summary/191/) to retrieve the players stats.  By simply replacing 191 with the id of any other player, you can view that players stats.
+
+```{r}
+static_url <-
+  'https://fantasy.premierleague.com/api/bootstrap-static/'
+
+#This text is passed to the GET using user_agent.  It allows those running the API to contact you should your requests be causing issues
+user_text <-
+  'my@email.address this is a personal project to test retrieving data from an api'
+
+#Get the result
+get_result_static <- GET(static_url, user_agent(user_text))
+
+# Check http_type() of resp_json
+http_type(get_result_static)
+
+# Parse returned text with fromJSON()
+all_stats_json <- fromJSON(content(get_result_static, as = "text"), simplifyDataFrame = TRUE)
+
+# Player stats
+players_df <- all_stats_json[["elements"]]
+
+# Player types
+player_type_df <- all_stats_json[["element_types"]]
+player_type_df <- player_type_df[ ,c ("id", "plural_name_short")] %>%
+  rename("player_type_id" = "id", "player_type" = "plural_name_short" )
+
+# Team stats
+team_df <- all_stats_json[["teams"]]
+
+# Subset the id and team name to join to player stats
+team_df <- team_df[,c("id", "name")] %>%
+  rename ("team_name" = "name")
+
+# Event stats
+events_df <- all_stats_json[["events"]]
+
+# Add Team Names to player stats
+players_df <- merge(x = players_df, y = team_df, by.x = "team", by.y="id", all.x=TRUE)
+
+# Add player types
+players_df <- merge(x = players_df, y = player_type_df, by.x = "element_type", by.y="player_type_id", all.x=TRUE)
+players_df <- players_df[order(players_df$id),]
+
+#field selection
+fields <- c("id", 
+            "first_name",
+            "second_name",
+            "player_type",
+            "team_name",
+            "now_cost",
+            "total_points",
+            "points_per_game",
+            "status",
+            "bps",
+            "influence",
+            "creativity",
+            "threat",
+            "ict_index",
+            "news",
+            "news_added",
+            "photo",
+            "bonus",
+            "value_form",
+            "value_season",
+            "goals_scored",
+            "assists",
+            "clean_sheets",
+            "own_goals",
+            "penalties_saved",
+            "penalties_missed",
+            "yellow_cards",
+            "red_cards",
+            "saves",
+            "bonus",
+            "element_type",
+            "team")
+
+# Remove columns not needed
+players_df <- players_df[ ,fields]
+
+# Add on url for images - **Not currently working - access denied**
+photo_url <- 'https://platform-static-files.s3.amazonaws.com/premierleague/photos/players/110x140/'
+players_df["photo"] <- paste0(photo_url, players_df[["photo"]])
+
+# Update cost
+players_df["now_cost"] <- players_df[["now_cost"]] * 100000
+
+
+# Save it to csv
+write.csv(players_df, 'data/player_stats.csv')
+
+datatable(players_df, rownames= FALSE, options = list(autoWidth = FALSE, pageLength=5))
+
+
+
+```
+
+
+# Loop through all players
+
+```{r }
+# 
+# 
+# player_base_url <-
+#   'https://fantasy.premierleague.com/api/element-summary/'
+# 
+# for (i in 1:10) {
+#   #Create the URL for the next id
+#   url <- paste0(player_base_url, i, '/')
+#   
+#   # Send a GET request to url
+#   get_player_result <- GET(url, user_agent(user_text))
+#   
+#   # Delay for 1 seconds between requests
+#   # This is helpful when making a lot of calls to an api
+#   # IT ensures you don't overload the server causing your requests to be rejected
+#   Sys.sleep(1)
+#   
+#   
+#   #Check the result returned sucessfully
+#   if (http_error(get_player_result)) {
+#     warning("The request for player id "+i + " failed")
+#   } else {
+#     #Do something with the data
+#     print(paste('GET sucessfully returned for player id ',  i))
+#   }
+# }
+```
+

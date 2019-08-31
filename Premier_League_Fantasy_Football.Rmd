@@ -33,6 +33,7 @@ Each player is given a unique id in the dataset.  If you want to identify the id
 With the player id you can go to [https://fantasy.premierleague.com/api/element-summary/191/](https://fantasy.premierleague.com/api/element-summary/191/) to retrieve the players stats.  By simply replacing 191 with the id of any other player, you can view that players stats.
 
 ```{r}
+# URL for the API
 static_url <-
   'https://fantasy.premierleague.com/api/bootstrap-static/'
 
@@ -47,7 +48,7 @@ get_result_static <- GET(static_url, user_agent(user_text))
 http_type(get_result_static)
 
 # Parse returned text with fromJSON()
-all_stats_json <- fromJSON(content(get_result_static, as = "text"), simplifyDataFrame = TRUE)
+all_stats_json <- fromJSON(content(get_result_static, as = "text",  encoding = "UTF-8"), simplifyDataFrame = TRUE)
 
 # Player stats
 players_df <- all_stats_json[["elements"]]
